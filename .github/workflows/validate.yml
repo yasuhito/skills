@@ -1,0 +1,57 @@
+name: Validate skills
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Markdown local links
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+
+          markdown_files = sorted(Path("skills").rglob("*.md"))
+          if not markdown_files:
+              raise SystemExit("No Markdown files found under skills/")
+
+          for path in markdown_files:
+              for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", path.read_text()):
+                  if "://" not in target and not target.startswith("#"):
+                      resolved = (path.parent / target.split("#", 1)[0]).resolve()
+                      if not resolved.exists():
+                          raise SystemExit(f"Broken local link in {path}: {target}")
+          PY
+      - name: Validate skill frontmatter
+        shell: ruby {0}
+        run: |
+          require "yaml"
+
+          skill_dirs = Dir.glob("skills/*").select { |dir| File.directory?(dir) }.sort
+          abort "No skill directories found under skills/" if skill_dirs.empty?
+
+          skill_dirs.each do |dir|
+            path = File.join(dir, "SKILL.md")
+            abort "Missing SKILL.md: #{dir}" unless File.file?(path)
+
+            content = File.read(path)
+            match = content.match(/\A---\n(.*?)\n---\n/m)
+            abort "Missing YAML frontmatter: #{path}" unless match
+
+            frontmatter = YAML.safe_load(match[1])
+            expected_name = File.basename(dir)
+            abort "Frontmatter name must be #{expected_name} in #{path}" unless frontmatter["name"] == expected_name
+            description = frontmatter["description"]
+            abort "Missing description in #{path}" unless description.is_a?(String) && !description.empty?
+            abort "Invalid disable-model-invocation in #{path}" unless frontmatter["disable-model-invocation"] == true
+          end
