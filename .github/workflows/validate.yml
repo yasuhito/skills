@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate requested files and local links
+      - name: Validate Markdown local links
         shell: bash
         run: |
           set -euo pipefail
@@ -21,24 +21,14 @@ jobs:
           from pathlib import Path
           import re
 
-          expected = {
-              "skills/create-verification-skill/SKILL.md",
-              "skills/create-verification-skill/references/feature-map-example/README.md",
-              "skills/create-verification-skill/references/feature-map-example/create-note.md",
-              "skills/create-verification-skill/references/feature-map-example/search.md",
-              "skills/maintain-verification-skill/SKILL.md",
-          }
-          actual = {str(path) for path in Path("skills").rglob("*.md")}
-          if actual != expected:
-              raise SystemExit(
-                  f"Markdown coverage mismatch: missing={expected - actual}, extra={actual - expected}"
-              )
+          markdown_files = sorted(Path("skills").rglob("*.md"))
+          if not markdown_files:
+              raise SystemExit("No Markdown files found under skills/")
 
-          for path_string in expected:
-              path = Path(path_string)
+          for path in markdown_files:
               for target in re.findall(r"\[[^]]+\]\(([^)]+)\)", path.read_text()):
                   if "://" not in target and not target.startswith("#"):
-                      resolved = (path.parent / target).resolve()
+                      resolved = (path.parent / target.split("#", 1)[0]).resolve()
                       if not resolved.exists():
                           raise SystemExit(f"Broken local link in {path}: {target}")
           PY
@@ -47,18 +37,20 @@ jobs:
         run: |
           require "yaml"
 
-          expected = {
-            "skills/create-verification-skill/SKILL.md" => "create-verification-skill",
-            "skills/maintain-verification-skill/SKILL.md" => "maintain-verification-skill",
-          }
+          skill_dirs = Dir.glob("skills/*").select { |dir| File.directory?(dir) }.sort
+          abort "No skill directories found under skills/" if skill_dirs.empty?
 
-          expected.each do |path, name|
+          skill_dirs.each do |dir|
+            path = File.join(dir, "SKILL.md")
+            abort "Missing SKILL.md: #{dir}" unless File.file?(path)
+
             content = File.read(path)
             match = content.match(/\A---\n(.*?)\n---\n/m)
             abort "Missing YAML frontmatter: #{path}" unless match
 
             frontmatter = YAML.safe_load(match[1])
-            abort "Invalid name in #{path}" unless frontmatter["name"] == name
+            expected_name = File.basename(dir)
+            abort "Frontmatter name must be #{expected_name} in #{path}" unless frontmatter["name"] == expected_name
             description = frontmatter["description"]
             abort "Missing description in #{path}" unless description.is_a?(String) && !description.empty?
             abort "Invalid disable-model-invocation in #{path}" unless frontmatter["disable-model-invocation"] == true
