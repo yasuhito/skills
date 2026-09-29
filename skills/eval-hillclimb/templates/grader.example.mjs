@@ -5,7 +5,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-bridge/sonnet"; // must differ from the tested model
+const JUDGE_MODEL = process.env.JUDGE_MODEL ?? "claude-bridge/claude-opus-5-5:medium"; // must differ from the tested model
 const PREAMBLE = [/^\s*(sorry|apologies|i apologize|good question|sure|of course)/i];
 
 export async function grade(c, output) {

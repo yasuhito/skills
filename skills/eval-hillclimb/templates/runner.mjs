@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Template runner for evals/<name>/. Adapt runCase() and grader.mjs to the target.
-// Usage: node run.mjs --model openai-codex/gpt-6-sol --repeats 3 [--split train|test|all] [--label baseline]
+// Usage: node run.mjs --model openai-codex/gpt-6-sol:medium --repeats 3 [--split train|test|all] [--label baseline]
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, cpSync, mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const args = Object.fromEntries(process.argv.slice(2).reduce((a, v, i, all) =>
   v.startsWith("--") ? [...a, [v.slice(2), all[i + 1]?.startsWith("--") ? true : all[i + 1] ?? true]] : a, []));
-const model = args.model ?? "openai-codex/gpt-6-sol";
+const model = args.model ?? "openai-codex/gpt-6-sol:medium";
 const repeats = Number(args.repeats ?? 3);
 const split = args.split ?? "all";
 const label = args.label ?? "run";

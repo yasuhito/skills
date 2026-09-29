@@ -162,9 +162,9 @@ If the gain is within noise, say so plainly and recommend not merging.
 **Runner**: multi-turn, so use a session. Turn 1 replays the prior explanation, turn 2 invokes the skill:
 ```
 pi -p --session-dir "$tmp/s" --session-id case-07 --skill ~/.agents/skills/wait-what \
-   --model openai-codex/gpt-6-sol -- "<turn 1 question>"
+   --model openai-codex/gpt-6-sol:medium -- "<turn 1 question>"
 pi -p --session-dir "$tmp/s" --session-id case-07 --skill ~/.agents/skills/wait-what \
-   --model openai-codex/gpt-6-sol -- "/skill:wait-what"
+   --model openai-codex/gpt-6-sol:medium -- "/skill:wait-what"
 ```
 Grade only the turn 2 output. Judge with a different model (for example through claude-bridge), no tools.
 
