@@ -15,7 +15,7 @@ DATA = os.path.join(HERE, 'data')
 CASES = os.path.join(DATA, 'cases.json')
 SESSIONS = os.path.expanduser('~/.pi/agent/sessions')
 
-GEN_MODEL = 'openai-codex/gpt-6-sol'
+GEN_MODEL = 'openai-codex/gpt-6.1-sol'
 GEN_THINKING = 'medium'
 JUDGE_MODEL = 'claude-sonnet-5'
 SCORES = ['plain', 'no_bad_analogy', 'background', 'targets_question', 'actionable']
