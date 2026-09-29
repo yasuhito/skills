@@ -53,14 +53,16 @@ quote には言い直しの本文から、その主張を含む部分を一字�
 
 JSON のみ出力: {"claims":[{"quote":"原文の引用","verdict":"supported|contradicted|distorted|unsupported|general","note":"誤りの場合の説明"}]}"""
 
-# (rubric, 保存先, 直前の説明を渡す長さ, モデル)。accuracy は直前の説明ではなく evidence() を渡す
-JUDGES = {'quality': (RUBRIC, 'judge', 4000, JUDGE_MODEL),
-          'accuracy': (ACCURACY_RUBRIC, 'judge-accuracy', None, 'claude-opus-5-5')}
+# (rubric, 保存先, 直前の説明を渡す長さ, モデル, 試行回数)。accuracy は直前の説明ではなく evidence() を渡す。
+# accuracy は主張ごとの判定で 2 回の食い違いが 2/20 と小さく、入力も大きいので 1 回にする。None は --trials に従う
+JUDGES = {'quality': (RUBRIC, 'judge', 4000, JUDGE_MODEL, None),
+          'accuracy': (ACCURACY_RUBRIC, 'judge-accuracy', None, 'claude-opus-5-5', 1)}
 ERROR_VERDICTS = {'contradicted', 'distorted', 'unsupported'}
 
 
 def accuracy_errors(trial):
     return [c for c in trial.get('claims', []) if c.get('verdict') in ERROR_VERDICTS]
+
 
 PLANT_PROMPT = """次の文章は、ある技術的な説明を平易に言い直したものです。
 この文章に、事実の誤りを 1 つだけ紛れ込ませてください。誤りは、条件の脱落、言い過ぎ、因果の取り違え、主語の取り違え、数値や名前の入れ替えのどれかにしてください。
@@ -160,7 +162,12 @@ def response_of(case, variant, sample):
 
 
 def claude_json(prompt, model=JUDGE_MODEL):
-    r = subprocess.run(['claude', '-p', '--model', model, '--output-format', 'text'],
+    # 既定の claude -p は Claude Code のシステムプロンプト、ツール、MCP で 1 回あたり約 44k トークン使う。
+    # 採点には不要なので外す (約 3.6k になる)
+    r = subprocess.run(['claude', '-p', '--model', model, '--output-format', 'text',
+                        '--system-prompt', '指示に従い、指定された JSON だけを出力してください。',
+                        '--tools', '', '--strict-mcp-config', '--mcp-config', '{"mcpServers":{}}',
+                        '--disable-slash-commands'],
                        input=prompt, capture_output=True, text=True, timeout=300, cwd='/tmp')
     m = re.search(r'\{.*\}', r.stdout, re.S)
     try:
@@ -214,7 +221,7 @@ def evidence(case, variant, sample, limit=60000):
 
 
 def judge_one(case, variant, sample, trial, judge):
-    rubric, dirname, prev_limit, model = JUDGES[judge]
+    rubric, dirname, prev_limit, model, _ = JUDGES[judge]
     out = os.path.join(DATA, dirname, variant, sample, f"{case['id']}.{trial}.json")
     if os.path.exists(out) and 'error' not in json.load(open(out)):
         return
@@ -288,7 +295,14 @@ def run(args):
         if args.variant != 'original':
             list(pool.map(lambda i: replay_one(cases[i], args.variant, args.sample), ids))
         list(pool.map(lambda job: judge_one(cases[job[0]], args.variant, args.sample, *job[1:]),
-                      [(i, t, j) for i in ids for t in range(args.trials) for j in JUDGES]))
+                      [(i, t, j) for i in ids for j, spec in JUDGES.items() for t in range(spec[4] or args.trials)]))
+    failed = [p for dirname in ('judge', 'judge-accuracy')
+              for p in glob.glob(os.path.join(DATA, dirname, args.variant, args.sample, '*.json'))
+              if 'error' in json.load(open(p))]
+    if failed:
+        # 利用上限などで失敗した採点。もう一度 run すると失敗した分だけやり直す
+        print(f'警告: 採点に失敗したものが {len(failed)} 件ある。例: {json.load(open(failed[0]))["error"][:100]}',
+              file=sys.stderr)
     report(argparse.Namespace(set=args.set, targets=[f'{args.variant}/{args.sample}'], verbose=False))
 
 
@@ -365,6 +379,9 @@ def report(args):
                     for c in accuracy_errors(t):
                         print(f"      {c['verdict']}: {c['quote'][:60]} / {c.get('note', '')[:80]}")
         n = len(rows)
+        if not n:
+            print('  採点済みの事例なし')
+            continue
         print(f"  n={n} understood={statistics.mean(r['understood'] for r in rows):.2f} "
               f"flips={flips}/{n} apology={apologies}/{n}"
               + (f' judge-vs-user={agree}/{n}' if variant == 'original' else ''))
